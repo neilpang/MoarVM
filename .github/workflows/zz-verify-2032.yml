@@ -1,0 +1,172 @@
+name: verify-2032
+
+on: [push, workflow_dispatch]
+
+jobs:
+
+  netbsd:
+    name: zmij on NetBSD
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: MoarVM/MoarVM
+          ref: 93add6f74f3224ae001903fe1d723007b7365d64
+          submodules: recursive
+
+      - name: Show what is pinned
+        run: |
+          set +e
+          echo "@@@ MoarVM HEAD: $(git rev-parse HEAD)"
+          echo "@@@ zmij submodule: $(git -C 3rdparty/zmij rev-parse HEAD)"
+          echo "@@@ zmij origin: $(git -C 3rdparty/zmij remote get-url origin)"
+          git -C 3rdparty/zmij rev-parse HEAD > /tmp/zmijsha
+          exit 0
+
+      - name: Compile zmij.c
+        uses: vmactions/netbsd-vm@v1
+        with:
+          usesh: true
+          copyback: false
+          cache-after-prepare: true
+          prepare: uname -a
+          run: |
+            set +e
+            set +u
+            cd 3rdparty/zmij
+            echo "@@@ compiler:"
+            cc --version 2>&1 | head -2
+            echo "@@@ zmij submodule sha: $(cat /tmp/zmijsha 2>/dev/null)"
+            echo "@@@ the two lines under test:"
+            sed -n '151p;2076p' zmij.c
+            echo "@@@ does float.h provide the C11 macros?"
+            echo '#include <float.h>' > /tmp/fh.c
+            echo 'int a = DBL_DECIMAL_DIG;' >> /tmp/fh.c
+            echo 'int b = FLT_DECIMAL_DIG;' >> /tmp/fh.c
+            cc -std=gnu11 -c /tmp/fh.c -o /tmp/fh.o > /tmp/fh.log 2>&1
+            echo "@@@ float.h probe rc=$?"
+            head -6 /tmp/fh.log
+            echo "@@@ compiling zmij.c, exactly the build/Makefile.in rule: cc -std=gnu11 -c zmij.c"
+            cc -std=gnu11 -c zmij.c -o /tmp/zmij.o > /tmp/z.log 2>&1
+            echo "@@@ zmij.c compile rc=$?"
+            echo "@@@ error lines:"
+            grep -e 'error' /tmp/z.log | head -20
+            echo "@@@ log head:"
+            head -40 /tmp/z.log
+            exit 0
+
+  openbsd:
+    name: zmij on OpenBSD
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: MoarVM/MoarVM
+          ref: 93add6f74f3224ae001903fe1d723007b7365d64
+          submodules: recursive
+
+      - name: Show what is pinned
+        run: |
+          set +e
+          echo "@@@ MoarVM HEAD: $(git rev-parse HEAD)"
+          echo "@@@ zmij submodule: $(git -C 3rdparty/zmij rev-parse HEAD)"
+          echo "@@@ zmij origin: $(git -C 3rdparty/zmij remote get-url origin)"
+          git -C 3rdparty/zmij rev-parse HEAD > /tmp/zmijsha
+          exit 0
+
+      - name: Compile zmij.c
+        uses: vmactions/openbsd-vm@v1
+        with:
+          usesh: true
+          copyback: false
+          cache-after-prepare: true
+          prepare: uname -a
+          run: |
+            set +e
+            set +u
+            cd 3rdparty/zmij
+            echo "@@@ compiler:"
+            cc --version 2>&1 | head -2
+            echo "@@@ zmij submodule sha: $(cat /tmp/zmijsha 2>/dev/null)"
+            echo "@@@ the two lines under test:"
+            sed -n '151p;2076p' zmij.c
+            echo "@@@ does float.h provide the C11 macros?"
+            echo '#include <float.h>' > /tmp/fh.c
+            echo 'int a = DBL_DECIMAL_DIG;' >> /tmp/fh.c
+            echo 'int b = FLT_DECIMAL_DIG;' >> /tmp/fh.c
+            cc -std=gnu11 -c /tmp/fh.c -o /tmp/fh.o > /tmp/fh.log 2>&1
+            echo "@@@ float.h probe rc=$?"
+            head -6 /tmp/fh.log
+            echo "@@@ compiling zmij.c, exactly the build/Makefile.in rule: cc -std=gnu11 -c zmij.c"
+            cc -std=gnu11 -c zmij.c -o /tmp/zmij.o > /tmp/z.log 2>&1
+            echo "@@@ zmij.c compile rc=$?"
+            echo "@@@ error lines:"
+            grep -e 'error' /tmp/z.log | head -20
+            echo "@@@ log head:"
+            head -40 /tmp/z.log
+            exit 0
+
+  solaris:
+    name: MoarVM build on Solaris
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: MoarVM/MoarVM
+          ref: 93add6f74f3224ae001903fe1d723007b7365d64
+          submodules: recursive
+
+      - name: Show what is pinned
+        run: |
+          set +e
+          echo "@@@ MoarVM HEAD: $(git rev-parse HEAD)"
+          echo "@@@ zmij submodule: $(git -C 3rdparty/zmij rev-parse HEAD)"
+          echo "@@@ zmij origin: $(git -C 3rdparty/zmij remote get-url origin)"
+          git -C 3rdparty/zmij rev-parse HEAD > /tmp/zmijsha
+          exit 0
+
+      - name: Configure and build until it stops
+        uses: vmactions/solaris-vm@v1
+        with:
+          usesh: true
+          copyback: false
+          cache-after-prepare: true
+          release: '11.4-gcc'
+          prepare: uname -a
+          run: |
+            set +e
+            set +u
+            export PATH=/usr/gnu/bin:/usr/bin:/usr/sbin:/opt/csw/bin:$PATH
+            # The workspace is rsynced in with the runner's uid while the VM
+            # runs as root, so git refuses it and update-submodules.pl dies.
+            git config --global --add safe.directory '*'
+            echo "@@@ safe.directory set, git sees the repo as:"
+            git -C "$PWD" rev-parse --short HEAD
+            echo "@@@ toolchain:"
+            echo "  perl:  $(perl -v 2>&1 | grep -e version | head -1)"
+            echo "  gcc:   $(gcc --version 2>&1 | head -1)"
+            echo "  cc:    $(cc --version 2>&1 | head -1)"
+            echo "  gmake: $(gmake --version 2>&1 | head -1)"
+            echo "@@@ args.c includes:"
+            grep -n -e 'include' src/core/args.c | head -5
+            echo "@@@ args.c alloca call sites:"
+            grep -n -e 'alloca(' src/core/args.c | head -5
+            echo "@@@ does anything in the tree include alloca.h?"
+            grep -rl -e 'alloca.h' src 3rdparty/zmij 2>/dev/null | head -5
+            perl Configure.pl --prefix=/tmp/moarinst > /tmp/conf.log 2>&1
+            echo "@@@ Configure.pl rc=$?"
+            echo "@@@ conf.log tail START"
+            tail -15 /tmp/conf.log
+            echo "@@@ conf.log tail END"
+            gmake -j4 > /tmp/build.log 2>&1
+            echo "@@@ gmake rc=$?"
+            echo "@@@ alloca lines:"
+            grep -e 'alloca' /tmp/build.log | head -10
+            echo "@@@ all error lines:"
+            grep -e 'error:' /tmp/build.log | head -20
+            echo "@@@ build log tail:"
+            tail -25 /tmp/build.log
+            exit 0
